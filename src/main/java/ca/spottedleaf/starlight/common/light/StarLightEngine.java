@@ -436,7 +436,7 @@ public abstract class StarLightEngine {
     protected abstract boolean canUseChunk(final ChunkAccess chunk);
 
     public final void blocksChangedInChunk(final LightChunkGetter lightAccess, final int chunkX, final int chunkZ,
-                                           final Set<BlockPos> positions, final Boolean[] changedSections) {
+                                           final Set<BlockPos> positions, final Set<StarLightInterface.LightPos> lightPositions, final Boolean[] changedSections) {
         this.setupCaches(lightAccess, chunkX * 16 + 7, 128, chunkZ * 16 + 7, true, true);
         try {
             final ChunkAccess chunk = this.getChunkInCache(chunkX, chunkZ);
@@ -452,6 +452,9 @@ public abstract class StarLightEngine {
             if (!positions.isEmpty()) {
                 this.propagateBlockChanges(lightAccess, chunk, positions);
             }
+            if (!lightPositions.isEmpty()) {
+                this.propagateLightChanges(lightAccess, chunk, lightPositions);
+            }
             this.updateVisible(lightAccess);
         } finally {
             this.destroyCaches();
@@ -461,6 +464,8 @@ public abstract class StarLightEngine {
     // subclasses should not initialise caches, as this will always be done by the super call
     // subclasses should not invoke updateVisible, as this will always be done by the super call
     protected abstract void propagateBlockChanges(final LightChunkGetter lightAccess, final ChunkAccess atChunk, final Set<BlockPos> positions);
+
+    protected abstract void propagateLightChanges(final LightChunkGetter lightAccess, final ChunkAccess atChunk, final Set<StarLightInterface.LightPos> lightPositions);
 
     protected abstract void checkBlock(final LightChunkGetter lightAccess, final int worldX, final int worldY, final int worldZ);
 

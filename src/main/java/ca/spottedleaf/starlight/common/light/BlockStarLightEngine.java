@@ -199,10 +199,44 @@ public final class BlockStarLightEngine extends StarLightEngine {
         return level;
     }
 
+    protected void checkLight(final LightChunkGetter lightAccess, final int worldX, final int worldY, final int worldZ, final int lightLevel) {
+        final int encodeOffset = this.coordinateOffset;
+        final int emittedMask = this.emittedLightMask;
+
+        final int currentLevel = this.getLightLevel(worldX, worldY, worldZ);
+        final BlockState blockState = this.getBlockState(worldX, worldY, worldZ);
+        final int emittedLevel = lightLevel & emittedMask;
+
+        this.setLightLevel(worldX, worldY, worldZ, emittedLevel);
+        if (emittedLevel != 0) {
+            this.appendToIncreaseQueue(
+                ((worldX + (worldZ << 6) + (worldY << (6 + 6)) + encodeOffset) & ((1L << (6 + 6 + 16)) - 1))
+                    | (emittedLevel & 0xFL) << (6 + 6 + 16)
+                    | (((long)ALL_DIRECTIONS_BITSET) << (6 + 6 + 16 + 4))
+                    | (blockState.isConditionallyFullOpaque() ? FLAG_HAS_SIDED_TRANSPARENT_BLOCKS : 0)
+            );
+        }
+
+        this.appendToDecreaseQueue(
+            ((worldX + (worldZ << 6) + (worldY << (6 + 6)) + encodeOffset) & ((1L << (6 + 6 + 16)) - 1))
+                | (currentLevel & 0xFL) << (6 + 6 + 16)
+                | (((long)ALL_DIRECTIONS_BITSET) << (6 + 6 + 16 + 4))
+        );
+    }
+
     @Override
     protected void propagateBlockChanges(final LightChunkGetter lightAccess, final ChunkAccess atChunk, final Set<BlockPos> positions) {
         for (final BlockPos pos : positions) {
             this.checkBlock(lightAccess, pos.getX(), pos.getY(), pos.getZ());
+        }
+
+        this.performLightDecrease(lightAccess);
+    }
+
+    @Override
+    protected void propagateLightChanges(final LightChunkGetter lightAccess, final ChunkAccess atChunk, final Set<StarLightInterface.LightPos> lightPositions) {
+        for (final StarLightInterface.LightPos pos : lightPositions) {
+            this.checkLight(lightAccess, pos.blockPos.getX(), pos.blockPos.getY(), pos.blockPos.getZ(), pos.lightLevel);
         }
 
         this.performLightDecrease(lightAccess);

@@ -465,6 +465,11 @@ public final class SkyStarLightEngine extends StarLightEngine {
         this.performLightDecrease(lightAccess);
     }
 
+    @Override
+    protected void propagateLightChanges(final LightChunkGetter lightAccess, final ChunkAccess atChunk, final Set<StarLightInterface.LightPos> lightPositions) {
+        // TODO: Implement this code
+    }
+
     protected final int[] heightMapGen = new int[32 * 32];
 
     @Override

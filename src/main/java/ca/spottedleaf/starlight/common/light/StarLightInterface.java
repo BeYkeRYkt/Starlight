@@ -208,7 +208,7 @@ public final class StarLightInterface {
 
             @Override
             public void onBlockEmissionIncrease(final BlockPos blockPos, final int i) {
-                this.checkBlock(blockPos);
+                StarLightInterface.this.lightQueue.queueLightChange(blockPos.immutable(), i);
             }
 
             @Override
@@ -219,7 +219,9 @@ public final class StarLightInterface {
 
             @Override
             public int runUpdates(final int i, final boolean bl, final boolean bl2) {
-                throw new UnsupportedOperationException();
+                boolean hadUpdates = this.hasLightWork();
+                StarLightInterface.this.propagateChanges();
+                return hadUpdates ? 1 : 0;
             }
 
             @Override
@@ -355,6 +357,14 @@ public final class StarLightInterface {
         }
 
         return this.lightQueue.queueBlockChange(pos);
+    }
+
+    public CompletableFuture<Void> lightChange(final BlockPos pos, int lightLevel) {
+        if (this.world == null || pos.getY() < WorldUtil.getMinBlockY(this.world) || pos.getY() > WorldUtil.getMaxBlockY(this.world)) { // empty world
+            return null;
+        }
+
+        return this.lightQueue.queueLightChange(pos, lightLevel);
     }
 
     public CompletableFuture<Void> sectionChange(final SectionPos pos, final boolean newEmptyValue) {
@@ -516,13 +526,14 @@ public final class StarLightInterface {
                 final int chunkZ = CoordinateUtils.getChunkZ(coordinate);
 
                 final Set<BlockPos> positions = task.changedPositions;
+                final Set<LightPos> lightPositions = task.lightPositions;
                 final Boolean[] sectionChanges = task.changedSectionSet;
 
-                if (skyEngine != null && (!positions.isEmpty() || sectionChanges != null)) {
-                    skyEngine.blocksChangedInChunk(this.lightAccess, chunkX, chunkZ, positions, sectionChanges);
+                if (skyEngine != null && (!positions.isEmpty() || !lightPositions.isEmpty() || sectionChanges != null)) {
+                    skyEngine.blocksChangedInChunk(this.lightAccess, chunkX, chunkZ, positions, lightPositions, sectionChanges);
                 }
-                if (blockEngine != null && (!positions.isEmpty() || sectionChanges != null)) {
-                    blockEngine.blocksChangedInChunk(this.lightAccess, chunkX, chunkZ, positions, sectionChanges);
+                if (blockEngine != null && (!positions.isEmpty() || !lightPositions.isEmpty() || sectionChanges != null)) {
+                    blockEngine.blocksChangedInChunk(this.lightAccess, chunkX, chunkZ, positions, lightPositions, sectionChanges);
                 }
 
                 if (skyEngine != null && task.queuedEdgeChecksSky != null) {
@@ -540,6 +551,16 @@ public final class StarLightInterface {
         }
     }
 
+    public static final class LightPos {
+        public BlockPos blockPos;
+        public int lightLevel;
+
+        public LightPos(BlockPos blockPos, int lightLevel) {
+            this.blockPos = blockPos;
+            this.lightLevel = lightLevel;
+        }
+    }
+
     protected static final class LightQueue {
 
         protected final Long2ObjectLinkedOpenHashMap<ChunkTasks> chunkTasks = new Long2ObjectLinkedOpenHashMap<>();
@@ -551,6 +572,12 @@ public final class StarLightInterface {
 
         public synchronized boolean isEmpty() {
             return this.chunkTasks.isEmpty();
+        }
+
+        public synchronized CompletableFuture<Void> queueLightChange(final BlockPos pos, int lightLevel) {
+            final ChunkTasks tasks = this.chunkTasks.computeIfAbsent(CoordinateUtils.getChunkKey(pos), ChunkTasks::new);
+            tasks.lightPositions.add(new LightPos(pos.immutable(), lightLevel));
+            return tasks.onComplete;
         }
 
         public synchronized CompletableFuture<Void> queueBlockChange(final BlockPos pos) {
@@ -624,6 +651,7 @@ public final class StarLightInterface {
         protected static final class ChunkTasks {
 
             public final Set<BlockPos> changedPositions = new HashSet<>();
+            public final Set<LightPos> lightPositions = new HashSet<>();
             public Boolean[] changedSectionSet;
             public ShortOpenHashSet queuedEdgeChecksSky;
             public ShortOpenHashSet queuedEdgeChecksBlock;
